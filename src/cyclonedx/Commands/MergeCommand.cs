@@ -132,6 +132,8 @@ namespace CycloneDX.Cli.Commands
                 // Revert to legacy (error-handling) behavior below
                 // in case the parameter was not passed
                 InputFiles = null;
+            } else {
+                Console.WriteLine($"Collected " + InputFiles.Count + " input files: [\n\t'" + string.Join("',\n\t'", InputFiles) + "'\n]");
             }
             var inputBoms = await InputBoms(InputFiles, options.InputFormat, outputToConsole).ConfigureAwait(false);
 
