@@ -193,8 +193,8 @@ Usage:
 
 Options:
   --input-files <input-files>                     Input BOM filenames (separate filenames with a space).
-  --input-files-list <input-files-list-files>     One or more text file(s) with input BOM filenames (one per line).
   --input-files-list0 <input-files-list-files>    One or more text-like file(s) with input BOM filenames (separated by 0x00 characters).
+  --input-files-list <input-files-list-files>     One or more text file(s) with input BOM filenames (one per line).
   --output-file <output-file>                     Output BOM filename, will write to stdout if no value provided.
   --input-format <autodetect|json|protobuf|xml>   Specify input file format.
   --output-format <autodetect|json|protobuf|xml>  Specify output file format.
