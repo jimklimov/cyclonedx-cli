@@ -98,9 +98,29 @@ namespace CycloneDX.Cli.Commands
                 foreach (string OneInputFileList in InputFilesList0)
                 {
                     Console.WriteLine($"Adding to input file list from " + OneInputFileList);
-                    string[] lines = File.ReadAllText(OneInputFileList).Split('\0');
+                    List<string> lines = new List<string>();
+                    string line = "";
+                    foreach (byte b in File.ReadAllBytes(OneInputFileList))
+                    {
+                        if (b == 0)
+                        {
+                            if (!string.IsNullOrEmpty(line))
+                            {
+                                lines.Add(line);
+                                line = "";
+                            }
+                        }
+                        else
+                        {
+                            line += (char)b;
+                        }
+                    }
+                    if (!string.IsNullOrEmpty(line))
+                    {
+                        lines.Add(line);
+                    }
                     InputFiles.AddRange(lines);
-                    Console.WriteLine($"Got " + lines.Length + " entries from " + OneInputFileList);
+                    Console.WriteLine($"Got " + lines.Count + " entries from " + OneInputFileList);
                 }
             }
 
