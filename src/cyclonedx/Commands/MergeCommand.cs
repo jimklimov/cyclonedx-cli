@@ -107,7 +107,11 @@ namespace CycloneDX.Cli.Commands
             else
             {
                 outputBom = CycloneDXUtils.FlatMerge(inputBoms, bomSubject);
-                if (outputBom.Metadata is null) outputBom.Metadata = new Metadata();
+                if (outputBom.Metadata is null)
+                {
+                    outputBom.Metadata = new Metadata();
+                }
+
                 if (bomSubject == null)
                 {
                     // otherwise use the first non-null component from the input
