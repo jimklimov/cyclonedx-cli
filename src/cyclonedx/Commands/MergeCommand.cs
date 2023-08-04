@@ -65,7 +65,28 @@ namespace CycloneDX.Cli.Commands
                 return (int)ExitCode.ParameterValidationError;
             }
 
+            Console.WriteLine($"Loading input document(s)...");
             var inputBoms = await InputBoms(DetermineInputFiles(options), options.InputFormat, outputToConsole).ConfigureAwait(false);
+
+            int countBoms = 0;
+            int countComponents = 0;
+            foreach (Bom inputBom in inputBoms)
+            {
+                countBoms++;
+                if (inputBom is null)
+                {
+                    continue;
+                }
+                if (inputBom.Components is not null && inputBom.Components.Count > 0)
+                {
+                    countComponents += inputBom.Components.Count;
+                }
+                if (inputBom.Metadata?.Component is not null)
+                {
+                    countComponents++;
+                }
+            }
+            Console.WriteLine($"Loaded {countBoms} input document(s) with {countComponents} components originally (overlaps to merge are possible)");
 
             Component bomSubject = null;
             if (options.Group != null || options.Name != null || options.Version != null)
@@ -78,6 +99,7 @@ namespace CycloneDX.Cli.Commands
                 };
 
             Bom outputBom;
+            Console.WriteLine($"Beginning merge processing (this can take a while)");
             if (options.Hierarchical)
             {
                 outputBom = CycloneDXUtils.HierarchicalMerge(inputBoms, bomSubject);
