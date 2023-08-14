@@ -86,3 +86,11 @@ to just be near the binary after every rebuild of the library (added to script a
 :; cp -pf ~/cyclonedx-dotnet-library/src/*{Utils,Core,Spdx}*/obj/Debug/net6.0/CycloneDX*.{dll,pdb} \
           ~/cyclonedx-cli/src/cyclonedx/bin/Debug/net6.0/
 ````
+
+Finally, it should be noted that DLLs used in `dotnet build` seem to be legit Windows
+DLLs when built in either OS, so to provide a platform-independent tarball it suffices
+to add the `cyclonedx.exe` from the Windows build into the
+`~/cyclonedx-cli/src/cyclonedx/bin/Debug/net6.0` directory prepared on Linux
+(which has a `cyclonedx` binary). Apparently these facade binaries are DLL interpreters,
+since the tool's code seems to end up in `cyclonedx.dll` (and `cyclonedx.pdb`) on both
+systems.
