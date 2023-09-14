@@ -32,7 +32,7 @@ namespace CycloneDX.Cli.Commands
         public static void Configure(RootCommand rootCommand)
         {
             Contract.Requires(rootCommand != null);
-            var subCommand = new Command("merge", "Merge two or more BOMs");
+            var subCommand = new System.CommandLine.Command("merge", "Merge two or more BOMs");
             subCommand.Add(new Option<List<string>>("--input-files", "Input BOM filenames (separate filenames with a space)."));
             subCommand.Add(new Option<List<string>>("--input-files-list", "One or more text file(s) with input BOM filenames (one per line)."));
             subCommand.Add(new Option<List<string>>("--input-files-nul-list", "One or more text-like file(s) with input BOM filenames (separated by 0x00 characters)."));
@@ -133,16 +133,12 @@ namespace CycloneDX.Cli.Commands
             outputBom = CycloneDXUtils.CleanupMetadataComponent(outputBom);
             outputBom = CycloneDXUtils.CleanupEmptyLists(outputBom);
 
-            outputBom.Version = 1;
-            outputBom.SerialNumber = "urn:uuid:" + System.Guid.NewGuid().ToString();
-            if (outputBom.Metadata is null)
-            {
-                outputBom.Metadata = new Metadata();
-            }
-            if (outputBom.Metadata.Timestamp is null)
-            {
-                outputBom.Metadata.Timestamp = DateTime.Now;
-            }
+            // Ensure that the new merged document has its own identity
+            // (new SerialNumber, Version=1, Timestamp...) and its Tools
+            // collection refers to this library and the program/tool
+            // like cyclonedx-cli which consumes it:
+            outputBom.BomMetadataUpdate(true);
+            outputBom.BomMetadataReferThisToolkit();
 
             ValidationResult validationResult = null;
             if (options.ValidateOutput || options.ValidateOutputRelaxed)
