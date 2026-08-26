@@ -1,0 +1,154 @@
+# Private/snapshot build notes (cyclonedx-cli)
+
+This repo is a long-lived fork of [CycloneDX/cyclonedx-cli](https://github.com/CycloneDX/cyclonedx-cli)
+that consumes a sibling fork of the library, `../cyclonedx-dotnet-library`.
+As of 2026-08-27, branch `privateBuild/20260827-rebase` in **both** repos
+was reset to `upstream/main` (CLI: `v0.33.1`; library: `v12.1.2` — six
+major versions ahead of the `v0.25.0`/`v6.0.0` fork point this project was
+previously built against) and the fork's custom capability was re-built on
+top of current upstream: the `rename-entity` command, and (library-side) a
+from-scratch, idiomatic re-implementation of the configurable multi-BOM
+merge engine the fork's `BomEntity`+`Merge.cs` provided. See
+`../cyclonedx-dotnet-library/README-privateBuild.md` for what changed
+there and why it's not a literal port.
+
+The two repos remain separate git checkouts connected only through NuGet
+packages — this repo's `src/cyclonedx/cyclonedx.csproj` pulls
+`CycloneDX.Utils`/`CycloneDX.Spdx.Interop` as `<PackageReference>`s, not
+project references. Building this repo alone with plain `dotnet build`
+restores the real, unmodified `12.1.2` packages from `nuget.org` and
+produces a CLI **without any of this fork's changes** — it builds and runs,
+just not with `rename-entity` available or the new merge behavior active.
+Producing a real snapshot requires building the library first, packing it
+under a version that only exists locally, and pointing this repo at that
+version — same mechanism as before, detailed below.
+
+Verified end-to-end on 2026-08-27 (branch `privateBuild/20260827-rebase` in
+both repos).
+
+## 0. Prerequisites: .NET 8/10 SDKs, not just 6/7
+
+This repo now targets `net10.0` only (no more `net6.0`). This machine had
+only the .NET 6/7 SDKs installed system-wide. `winget install
+Microsoft.DotNet.SDK.8`/`.10` hung indefinitely on a UAC prompt nothing
+could answer non-interactively; worked around with a per-user install (no
+admin needed) via Microsoft's install script:
+
+```powershell
+Invoke-WebRequest -Uri "https://dot.net/v1/dotnet-install.ps1" -OutFile "$env:TEMP\dotnet-install.ps1" -UseBasicParsing
+& "$env:TEMP\dotnet-install.ps1" -Channel 8.0 -InstallDir "$env:LOCALAPPDATA\dotnet-custom" -NoPath
+& "$env:TEMP\dotnet-install.ps1" -Channel 10.0 -InstallDir "$env:LOCALAPPDATA\dotnet-custom" -NoPath
+```
+
+`setx`/persisting the PATH change via `[Environment]::SetEnvironmentVariable`
+does **not** reach already-running shells (only new logon sessions), so
+every command in this session (and every example below) needs:
+
+```sh
+export PATH="$LOCALAPPDATA/dotnet-custom:$PATH"
+export DOTNET_ROOT="$LOCALAPPDATA/dotnet-custom"
+```
+
+## 1. Build & pack the library snapshot
+
+Full detail is in `../cyclonedx-dotnet-library/README-privateBuild.md`.
+Short version:
+
+```sh
+cd ../cyclonedx-dotnet-library
+LIBVER=12.1.2.1-privateBuild.20260827
+dotnet build CycloneDXLibrary.sln -c Debug
+dotnet pack CycloneDXLibrary.sln -c Debug -p:Version="$LIBVER"
+for P in src/CycloneDX.Core/bin/Debug/CycloneDX.Core.$LIBVER.nupkg \
+         src/CycloneDX.Utils/bin/Debug/CycloneDX.Utils.$LIBVER.nupkg \
+         src/CycloneDX.Spdx/bin/Debug/CycloneDX.Spdx.$LIBVER.nupkg \
+         src/CycloneDX.Spdx.Interop/bin/Debug/CycloneDX.Spdx.Interop.$LIBVER.nupkg ; do
+  dotnet nuget push "$P" -s userhome
+done
+```
+
+`userhome` is a folder-based NuGet feed (`C:\Users\klimov\.nuget`)
+registered and enabled in `%APPDATA%\NuGet\NuGet.Config` on this machine.
+On a fresh machine, register it first: `dotnet nuget add source
+"C:\Users\<you>\.nuget" --name userhome`.
+
+## 2. Build the CLI against the snapshot
+
+`src/cyclonedx/cyclonedx.csproj` routes the library package version through
+one overridable MSBuild property (re-added this session after the branch
+reset wiped the version committed in the prior one):
+
+```xml
+<CycloneDXLibraryVersion Condition="'$(CycloneDXLibraryVersion)' == ''">12.1.2</CycloneDXLibraryVersion>
+...
+<PackageReference Include="CycloneDX.Utils" Version="$(CycloneDXLibraryVersion)" />
+<PackageReference Include="CycloneDX.Spdx.Interop" Version="$(CycloneDXLibraryVersion)" />
+```
+
+Plain `dotnet build` still defaults to the published `12.1.2`. To build
+against the snapshot from step 1:
+
+```sh
+dotnet build cyclonedx-cli.sln -c Debug -p:CycloneDXLibraryVersion=12.1.2.1-privateBuild.20260827
+```
+
+## 3. Verify you actually got the snapshot, and smoke-test it
+
+```sh
+grep "CycloneDX.Utils/" src/cyclonedx/obj/project.assets.json   # should show the private version, not 12.1.2
+```
+
+Then the real thing — merge and rename-entity against fixture BOMs (both
+confirmed working end-to-end this session):
+
+```sh
+dotnet src/cyclonedx/bin/Debug/net10.0/cyclonedx.dll merge \
+  --input-files tests/cyclonedx.tests/Resources/Merge/sbom1.json tests/cyclonedx.tests/Resources/Merge/sbom2.json \
+  --output-file /tmp/merged.json
+
+dotnet src/cyclonedx/bin/Debug/net10.0/cyclonedx.dll rename-entity \
+  --input-file <a bom with bom-ref "lib-old" and a dependsOn referencing it> \
+  --old-ref lib-old --new-ref lib-new --output-file /tmp/renamed.json
+# -> lib-old's bom-ref AND the dependency's back-reference both become
+#    lib-new; SerialNumber/Timestamp/Tools refreshed.
+```
+
+## 4. Known test baseline
+
+`dotnet test cyclonedx-cli.sln -p:CycloneDXLibraryVersion=$LIBVER`:
+**132/132 passed** (129 pre-existing + 3 new `RenameEntityTests`). Library
+side: `CycloneDX.Utils.Tests` 35/35 passed (25 pre-existing + 10 new
+`MergeStrategyTests`); `CycloneDX.Core.Tests` has ~300 pre-existing
+Protobuf-only failures unrelated to this work (see the library's
+`README-privateBuild.md` §5) — likely this machine missing `protoc`, not a
+regression.
+
+## 5. What's actually different from the fork, and what's still missing
+
+See `../cyclonedx-dotnet-library/README-privateBuild.md` §3 for the full
+design rationale (interfaces + default methods instead of a `BomEntity`
+base class, and why). CLI-visible summary:
+
+- `rename-entity` is back, functionally identical from the outside (same
+  flags, same behavior) — internals now call the library's
+  `Bom.RenameRef(old, new)` instead of `WalkThis()`+`RenameBomRef(old, new,
+  bwr)`.
+- `merge` gained no new flags. It now defaults to
+  `MergeStrategy.Default()` internally (via new library overloads), so
+  equivalent-but-not-exactly-equal components (e.g. same package, differing
+  `Scope`) get reconciled instead of just deduped by exact match — closer
+  to what the fork's CLI actually did, without a CLI-surface change (the
+  fork never exposed strategy toggles at the CLI layer either).
+- Not ported: CLI-level exposure of `MergeStrategy` toggles (never existed
+  in the fork either — it hardcoded `Default()` inside the library); the
+  fork's `--validate-output-relaxed` merge debugging flag; subset-dependency
+  merging and the scope-based-rename conflict strategy (both flagged as
+  known gaps on the library side, reserved but not implemented).
+
+## 6. Bumping this repo's own version
+
+Unchanged from before: `semver.txt` isn't wired into the assembly at
+build time (only `release.yml`'s `dotnet publish .../p:Version=$(cat
+semver.txt)` uses it). Pass `-p:Version=` explicitly for a private
+build/publish, e.g. `-p:Version=0.33.1.1-privateBuild.20260827`, mirroring
+the library's `-privateBuild.<date>` suffix convention.
