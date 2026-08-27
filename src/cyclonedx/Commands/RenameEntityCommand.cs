@@ -65,13 +65,21 @@ namespace CycloneDX.Cli.Commands
             }
 
             Console.WriteLine($"Renaming \"{options.OldRef}\" to \"{options.NewRef}\" (this can take a while)");
-            if (bom.RenameRef(options.OldRef, options.NewRef))
+            try
             {
-                Console.WriteLine($"Did not encounter any issues during the rename operation");
+                if (bom.RenameRef(options.OldRef, options.NewRef))
+                {
+                    Console.WriteLine($"Did not encounter any issues during the rename operation");
+                }
+                else
+                {
+                    Console.WriteLine($"Rename operation found nothing to do (e.g. old ref name not mentioned in the Bom document)");
+                }
             }
-            else
+            catch (InvalidOperationException ex)
             {
-                Console.WriteLine($"Rename operation found nothing to do (e.g. old ref name not mentioned in the Bom document)");
+                Console.WriteLine($"Rename operation refused: {ex.Message}");
+                return (int)ExitCode.ParameterValidationError;
             }
 
             // Ensure that the modified document has its own identity
