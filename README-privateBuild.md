@@ -56,7 +56,7 @@ Short version:
 
 ```sh
 cd ../cyclonedx-dotnet-library
-LIBVER=12.1.2.1-privateBuild.20260827
+LIBVER=12.1.2.2-privateBuild.20260827
 dotnet build CycloneDXLibrary.sln -c Debug
 dotnet pack CycloneDXLibrary.sln -c Debug -p:Version="$LIBVER"
 for P in src/CycloneDX.Core/bin/Debug/CycloneDX.Core.$LIBVER.nupkg \
@@ -117,33 +117,45 @@ dotnet src/cyclonedx/bin/Debug/net10.0/cyclonedx.dll rename-entity \
 
 `dotnet test cyclonedx-cli.sln -p:CycloneDXLibraryVersion=$LIBVER`:
 **132/132 passed** (129 pre-existing + 3 new `RenameEntityTests`). Library
-side: `CycloneDX.Utils.Tests` 35/35 passed (25 pre-existing + 10 new
-`MergeStrategyTests`); `CycloneDX.Core.Tests` has ~300 pre-existing
-Protobuf-only failures unrelated to this work (see the library's
-`README-privateBuild.md` §5) — likely this machine missing `protoc`, not a
-regression.
+side: `CycloneDX.Utils.Tests` 43/43 passed; `CycloneDX.Core.Tests` has ~300
+pre-existing Protobuf-only failures unrelated to this work (see the
+library's `README-privateBuild.md` §5) — likely this machine missing
+`protoc`, not a regression.
 
 ## 5. What's actually different from the fork, and what's still missing
 
 See `../cyclonedx-dotnet-library/README-privateBuild.md` §3 for the full
 design rationale (interfaces + default methods instead of a `BomEntity`
-base class, and why). CLI-visible summary:
+base class, and why) and its "Fixed after initial review" section for real
+behavior differences from the old fork that a second look caught (not just
+missing features) — most notably, the default scope-conflict resolution
+initially landed backwards from the fork's actual behavior and has since
+been corrected. CLI-visible summary:
 
 - `rename-entity` is back, functionally identical from the outside (same
   flags, same behavior) — internals now call the library's
   `Bom.RenameRef(old, new)` instead of `WalkThis()`+`RenameBomRef(old, new,
-  bwr)`.
-- `merge` gained no new flags. It now defaults to
-  `MergeStrategy.Default()` internally (via new library overloads), so
-  equivalent-but-not-exactly-equal components (e.g. same package, differing
-  `Scope`) get reconciled instead of just deduped by exact match — closer
-  to what the fork's CLI actually did, without a CLI-surface change (the
-  fork never exposed strategy toggles at the CLI layer either).
-- Not ported: CLI-level exposure of `MergeStrategy` toggles (never existed
-  in the fork either — it hardcoded `Default()` inside the library); the
-  fork's `--validate-output-relaxed` merge debugging flag; subset-dependency
-  merging and the scope-based-rename conflict strategy (both flagged as
-  known gaps on the library side, reserved but not implemented).
+  bwr)`. Now also surfaces a clean "refused" error (not a crash) if the
+  requested new-ref collides with an existing identifier elsewhere in the
+  document.
+- `merge` gained one new flag: `--component-conflict-resolution
+  <KeepSeparate|Squash_UpgradeScope|Squash_DowngradeScope|
+  Squash_RenameByScope>`, defaulting to `Squash_UpgradeScope`. This is a
+  real gap-fix, not cosmetic: the fork never exposed strategy selection at
+  the CLI layer either (it hardcoded `Default()` inside the library), so
+  this is new CLI capability, not a restoration. `Squash_RenameByScope`
+  (verified end-to-end: `--input-files scope-a.json scope-b.json
+  --component-conflict-resolution Squash_RenameByScope`) is a genuinely new
+  feature — when the same component is `required` in one source and
+  `excluded` in another, both survive as distinct entries
+  (`lp:scope=Required` / `lp:scope=Excluded`) with each source's
+  `dependsOn` correctly repointed at its own variant, instead of being
+  squashed together or left as an ambiguous duplicate bom-ref.
+- Not ported: CLI-level exposure of the *other* `MergeStrategy` toggles
+  (`UseEntityMerge`, `RenameConflictingComponents`,
+  `MergeSubsetDependencies`, `TreatDependencyAsExtraProperty`, the
+  `DoBomMetadataUpdate*` group — all still hardcoded via `Default()`); the
+  fork's `--validate-output-relaxed` merge debugging flag.
 
 ## 6. Bumping this repo's own version
 
