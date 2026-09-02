@@ -45,6 +45,8 @@ namespace CycloneDX.Cli.Commands
                 new Option<string>("--group", "Provide the group of software the merged BOM describes."),
                 new Option<string>("--name", "Provide the name of software the merged BOM describes (required for hierarchical merging)."),
                 new Option<string>("--version", "Provide the version of software the merged BOM describes (required for hierarchical merging)."),
+                new Option<bool>("--validate-output", "Validate the merged document before writing it, and do not write it if validation fails."),
+                new Option<bool>("--validate-output-relaxed", "Validate the merged document, but still write it (for troubleshooting) even if validation fails."),
 #if NET8_0_OR_GREATER
                 new Option<ComponentConflictResolution>("--component-conflict-resolution", "How to resolve two equivalent (same type/name/version/group/purl) but not-identical Components, e.g. differing only by Scope. Default: squash, preferring the more permissive Scope."),
 #endif
@@ -149,13 +151,49 @@ namespace CycloneDX.Cli.Commands
             }
 #endif
 
+            ValidationResult validationResult = null;
+            if (options.ValidateOutput || options.ValidateOutputRelaxed)
+            {
+                Console.WriteLine("Validating merged BOM...");
+                validationResult = Json.Validator.Validate(Json.Serializer.Serialize(outputBom), outputBom.SpecVersion);
+
+                if (validationResult.Messages != null)
+                {
+                    foreach (var message in validationResult.Messages)
+                    {
+                        Console.WriteLine(message);
+                    }
+                }
+
+                if (validationResult.Valid)
+                {
+                    Console.WriteLine("Merged BOM validated successfully.");
+                }
+                else
+                {
+                    Console.WriteLine("Merged BOM is not valid.");
+                    if (!options.ValidateOutputRelaxed)
+                    {
+                        Console.WriteLine("NOT writing output file...");
+                        return (int)ExitCode.SignatureFailedVerification;
+                    }
+                }
+            }
+
             if (!outputToConsole)
             {
                 Console.WriteLine("Writing output file...");
                 Console.WriteLine($"    Total {outputBom.Components?.Count ?? 0} components");
             }
 
-            return await CliUtils.OutputBomHelper(outputBom, (ConvertFormat)options.OutputFormat, options.OutputVersion, options.OutputFile).ConfigureAwait(false);
+            var res = await CliUtils.OutputBomHelper(outputBom, (ConvertFormat)options.OutputFormat, options.OutputVersion, options.OutputFile).ConfigureAwait(false);
+            if (validationResult != null && !validationResult.Valid)
+            {
+                // Relaxed mode: the file was still written above, but the
+                // command as a whole should still report failure.
+                return (int)ExitCode.SignatureFailedVerification;
+            }
+            return res;
         }
 
         /// <summary>
