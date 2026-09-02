@@ -110,7 +110,10 @@ namespace CycloneDX.Cli.Commands
                 if (outputBom.Metadata is null) outputBom.Metadata = new Metadata();
                 if (bomSubject is null)
                 {
-                    // otherwise use the first non-null component from the input BOMs as the default
+                    // otherwise use the first non-null component from the input
+                    // BOMs as the default; note CleanupMetadataComponent below,
+                    // since that same component may also already be present
+                    // in outputBom.Components.
                     foreach (var bom in inputBoms)
                     {
                         if(bom.Metadata != null && bom.Metadata.Component != null)
@@ -121,6 +124,11 @@ namespace CycloneDX.Cli.Commands
                     }
                 }
             }
+
+#if NET8_0_OR_GREATER
+            outputBom = CycloneDXUtils.CleanupMetadataComponent(outputBom, mergeStrategy);
+            outputBom = CycloneDXUtils.CleanupEmptyLists(outputBom);
+#endif
 
             // Ensure that the merged document has its own identity (new
             // SerialNumber, Version=1, Timestamp...) and that its Tools
