@@ -132,6 +132,16 @@ namespace CycloneDX.Cli.Commands
             outputBom = CycloneDXUtils.CleanupEmptyLists(outputBom);
 #endif
 
+            // FlatMerge/HierarchicalMerge never set SpecVersion on their
+            // result, so it defaults to v1_0 unless assigned here. Apply the
+            // requested --output-version (or the library's current version,
+            // matching OutputBomHelper's own default) before the
+            // --validate-output check below, so validation reflects the
+            // spec version that will actually be written -- rather than
+            // OutputBomHelper silently overriding it afterwards, by which
+            // point validation has already run against the wrong target.
+            outputBom.SpecVersion = options.OutputVersion ?? SpecificationVersionHelpers.CurrentVersion;
+
             // Ensure that the merged document has its own identity (new
             // SerialNumber, Version=1, Timestamp...) and that its Tools
             // collection records the library and program that produced it.
