@@ -32,6 +32,8 @@ namespace CycloneDX.Cli.Commands
         public string Group { get; set; }
         public string Name { get; set; }
         public string Version { get; set; }
+        public bool ValidateOutput { get; set; }
+        public bool ValidateOutputRelaxed { get; set; }
 #if NET8_0_OR_GREATER
         public ComponentConflictResolution? ComponentConflictResolution { get; set; }
 #endif
