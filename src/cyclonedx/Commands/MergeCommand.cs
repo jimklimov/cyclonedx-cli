@@ -122,6 +122,13 @@ namespace CycloneDX.Cli.Commands
                 }
             }
 
+            // Ensure that the merged document has its own identity (new
+            // SerialNumber, Version=1, Timestamp...) and that its Tools
+            // collection records the library and program that produced it.
+#if NET8_0_OR_GREATER
+            outputBom.BomMetadataUpdate(true);
+            outputBom.BomMetadataReferThisToolkit();
+#else
             outputBom.Version = 1;
             outputBom.SerialNumber = "urn:uuid:" + System.Guid.NewGuid().ToString();
             if (outputBom.Metadata == null)
@@ -132,6 +139,7 @@ namespace CycloneDX.Cli.Commands
             {
                 outputBom.Metadata.Timestamp = DateTime.Now;
             }
+#endif
 
             if (!outputToConsole)
             {
