@@ -103,17 +103,12 @@ namespace CycloneDX.Cli.Commands
             else
             {
 #if NET8_0_OR_GREATER
-                outputBom = CycloneDXUtils.FlatMerge(inputBoms, mergeStrategy);
+                outputBom = CycloneDXUtils.FlatMerge(inputBoms, bomSubject, mergeStrategy);
 #else
-                outputBom = CycloneDXUtils.FlatMerge(inputBoms);
+                outputBom = CycloneDXUtils.FlatMerge(inputBoms, bomSubject);
 #endif
                 if (outputBom.Metadata is null) outputBom.Metadata = new Metadata();
-                if (bomSubject != null)
-                {
-                    // use the params provided if possible
-                    outputBom.Metadata.Component = bomSubject;
-                }
-                else
+                if (bomSubject is null)
                 {
                     // otherwise use the first non-null component from the input BOMs as the default
                     foreach (var bom in inputBoms)
