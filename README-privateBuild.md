@@ -56,7 +56,7 @@ Short version:
 
 ```sh
 cd ../cyclonedx-dotnet-library
-LIBVER=12.1.2.2-privateBuild.20260827
+LIBVER=12.1.2.3-privateBuild.20260902
 dotnet build CycloneDXLibrary.sln -c Debug
 dotnet pack CycloneDXLibrary.sln -c Debug -p:Version="$LIBVER"
 for P in src/CycloneDX.Core/bin/Debug/CycloneDX.Core.$LIBVER.nupkg \
@@ -116,46 +116,58 @@ dotnet src/cyclonedx/bin/Debug/net10.0/cyclonedx.dll rename-entity \
 ## 4. Known test baseline
 
 `dotnet test cyclonedx-cli.sln -p:CycloneDXLibraryVersion=$LIBVER`:
-**132/132 passed** (129 pre-existing + 3 new `RenameEntityTests`). Library
-side: `CycloneDX.Utils.Tests` 43/43 passed; `CycloneDX.Core.Tests` has ~300
+**132/132 passed** (129 pre-existing + 3 `RenameEntityTests`). Library
+side: `CycloneDX.Utils.Tests` 46/46 passed; `CycloneDX.Core.Tests` has ~300
 pre-existing Protobuf-only failures unrelated to this work (see the
 library's `README-privateBuild.md` §5) — likely this machine missing
 `protoc`, not a regression.
 
-## 5. What's actually different from the fork, and what's still missing
+## 5. What's actually different, and what's still not covered
 
 See `../cyclonedx-dotnet-library/README-privateBuild.md` §3 for the full
-design rationale (interfaces + default methods instead of a `BomEntity`
-base class, and why) and its "Fixed after initial review" section for real
-behavior differences from the old fork that a second look caught (not just
-missing features) — most notably, the default scope-conflict resolution
-initially landed backwards from the fork's actual behavior and has since
-been corrected. CLI-visible summary:
+design rationale (interfaces + default methods instead of a base class)
+and its "Fixed after initial review" section for real behavior
+differences a second look caught (not just missing features) — most
+notably, the default scope-conflict resolution initially landed backwards
+and has since been corrected. CLI-visible summary of `merge`'s surface:
 
-- `rename-entity` is back, functionally identical from the outside (same
-  flags, same behavior) — internals now call the library's
-  `Bom.RenameRef(old, new)` instead of `WalkThis()`+`RenameBomRef(old, new,
-  bwr)`. Now also surfaces a clean "refused" error (not a crash) if the
-  requested new-ref collides with an existing identifier elsewhere in the
-  document.
-- `merge` gained one new flag: `--component-conflict-resolution
+- `--component-conflict-resolution
   <KeepSeparate|Squash_UpgradeScope|Squash_DowngradeScope|
-  Squash_RenameByScope>`, defaulting to `Squash_UpgradeScope`. This is a
-  real gap-fix, not cosmetic: the fork never exposed strategy selection at
-  the CLI layer either (it hardcoded `Default()` inside the library), so
-  this is new CLI capability, not a restoration. `Squash_RenameByScope`
-  (verified end-to-end: `--input-files scope-a.json scope-b.json
-  --component-conflict-resolution Squash_RenameByScope`) is a genuinely new
-  feature — when the same component is `required` in one source and
-  `excluded` in another, both survive as distinct entries
-  (`lp:scope=Required` / `lp:scope=Excluded`) with each source's
-  `dependsOn` correctly repointed at its own variant, instead of being
-  squashed together or left as an ambiguous duplicate bom-ref.
-- Not ported: CLI-level exposure of the *other* `MergeStrategy` toggles
+  Squash_RenameByScope>` (default `Squash_UpgradeScope`) selects how two
+  equivalent-but-not-identical components (e.g. differing only by `Scope`)
+  are reconciled. `Squash_RenameByScope` keeps both as distinct entries,
+  suffixed `:scope=<value>`, with every back-reference rewritten to match,
+  instead of squashing them together or leaving an ambiguous duplicate
+  bom-ref — verified end-to-end with two BOMs where the same component is
+  `required` in one and `excluded` in the other.
+- `--input-files-list <file>...` / `--input-files-nul-list <file>...` add
+  filenames (one per line, or 0x00-separated) from one or more list files
+  to `--input-files`, to exceed OS/shell command-line length or
+  argument-count limits when merging many BOMs.
+- `--validate-output` / `--validate-output-relaxed` validate the merged
+  document against its own spec version before writing; strict mode
+  refuses to write on failure, relaxed mode writes anyway (for
+  troubleshooting) but still reports failure via the exit code.
+- Passing a BOM subject (`--group`/`--name`/`--version`) into a flat merge
+  now links it into the dependency graph the same way a hierarchical merge
+  already did (a synthetic `<dependency ref="subject"><dependsOn>` entry
+  linking it to each source BOM's own component) — previously this only
+  set `Metadata.Component`, silently dropping that linkage for flat merges.
+- The merged document now always carries `Metadata.Tools` (via
+  `Bom.BomMetadataUpdate`/`BomMetadataReferThisToolkit`) recording this
+  library and the running program, matching what `rename-entity` already
+  did; previously `merge` only stamped `Version`/`SerialNumber`/`Timestamp`
+  and left `Tools` untouched.
+- A `Metadata.Component` that's auto-selected from an input BOM (no
+  explicit subject given) and also happens to duplicate an entry already
+  in the merged `Components` list is now detected and merged/evicted
+  (`CleanupMetadataComponent`), and now-empty top-level lists (e.g. an
+  empty `vulnerabilities: []` from BOMs that had none) are dropped
+  (`CleanupEmptyLists`) rather than serialized as noise.
+- Not covered: CLI-level exposure of the *other* `MergeStrategy` toggles
   (`UseEntityMerge`, `RenameConflictingComponents`,
   `MergeSubsetDependencies`, `TreatDependencyAsExtraProperty`, the
-  `DoBomMetadataUpdate*` group — all still hardcoded via `Default()`); the
-  fork's `--validate-output-relaxed` merge debugging flag.
+  `DoBomMetadataUpdate*` group — all still hardcoded via `Default()`).
 
 ## 6. Bumping this repo's own version
 
