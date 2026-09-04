@@ -36,6 +36,8 @@ namespace CycloneDX.Cli.Commands
         public bool ValidateOutputRelaxed { get; set; }
 #if NET8_0_OR_GREATER
         public ComponentConflictResolution? ComponentConflictResolution { get; set; }
+        public bool AttachDanglingComponents { get; set; }
+        public string AttachDanglingComponentsRef { get; set; }
 #endif
     }
 }

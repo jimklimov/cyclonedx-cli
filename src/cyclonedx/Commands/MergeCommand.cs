@@ -49,6 +49,8 @@ namespace CycloneDX.Cli.Commands
                 new Option<bool>("--validate-output-relaxed", "Validate the merged document, but still write it (for troubleshooting) even if validation fails."),
 #if NET8_0_OR_GREATER
                 new Option<ComponentConflictResolution>("--component-conflict-resolution", "How to resolve two equivalent (same type/name/version/group/purl) but not-identical Components, e.g. differing only by Scope. Default: squash, preferring the more permissive Scope."),
+                new Option<bool>("--attach-dangling-components", "Attach any components no dependsOn edge reaches (grouped by Scope into synthetic components) so consumers that walk the dependency graph from the subject, rather than scanning the flat components list, don't silently miss them."),
+                new Option<string>("--attach-dangling-components-ref", "Existing bom-ref to attach dangling components under (with --attach-dangling-components). Defaults to the merge subject if not given or not found."),
 #endif
             };
             subCommand.Handler = CommandHandler.Create<MergeCommandOptions>(Merge);
@@ -130,6 +132,21 @@ namespace CycloneDX.Cli.Commands
 #if NET8_0_OR_GREATER
             outputBom = CycloneDXUtils.CleanupMetadataComponent(outputBom, mergeStrategy);
             outputBom = CycloneDXUtils.CleanupEmptyLists(outputBom);
+
+            if (options.AttachDanglingComponents)
+            {
+                var attached = outputBom.AttachDanglingComponents(options.AttachDanglingComponentsRef);
+                if (attached.Count > 0)
+                {
+                    var totalAttached = 0;
+                    foreach (var bucket in attached.Values) totalAttached += bucket.Count;
+                    Console.WriteLine($"Attached {totalAttached} component(s) unreachable from the dependency graph, in {attached.Count} scope bucket(s):");
+                    foreach (var bucket in attached)
+                    {
+                        Console.WriteLine($"    {bucket.Key}: {bucket.Value.Count} component(s)");
+                    }
+                }
+            }
 #endif
 
             // FlatMerge/HierarchicalMerge never set SpecVersion on their
