@@ -148,6 +148,23 @@ and has since been corrected. CLI-visible summary of `merge`'s surface:
   document against its own spec version before writing; strict mode
   refuses to write on failure, relaxed mode writes anyway (for
   troubleshooting) but still reports failure via the exit code.
+- `--strip-empty-lists` (also on `convert`) omits empty list properties
+  (`"licenses": []`, `"dependsOn": []`, `"provides": []`, a `Pedigree`'s
+  `"variants": []`, etc.) anywhere in the document instead of writing them
+  out — schema-valid either way (none of these are `required` or carry
+  `minItems` in the 1.4–1.7 schemas), purely to cut clutter. Matters most
+  when the output spec version equals the library's current version:
+  `BomUtils.GetBomForSerialization` serializes that case without a copy,
+  so empty lists survive as-is; for every older target version the
+  Protobuf-based deep copy `CopyBomAndDowngrade` already collapses them to
+  `null` on its own (proto3 can't tell "empty repeated field" from
+  "absent"), so the flag is a no-op there. Implemented as
+  `CycloneDXUtils.CleanupEmptyListsDeep` in the library (a recursive
+  counterpart to the top-level-only `CleanupEmptyLists` merge already
+  applies unconditionally) — see
+  `../cyclonedx-dotnet-library/README-privateBuild.md`. For `merge`, it
+  runs before `--validate-output` so the validated content matches what
+  actually gets written.
 - Passing a BOM subject (`--group`/`--name`/`--version`) into a flat merge
   now links it into the dependency graph the same way a hierarchical merge
   already did (a synthetic `<dependency ref="subject"><dependsOn>` entry
