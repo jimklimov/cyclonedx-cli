@@ -47,6 +47,7 @@ namespace CycloneDX.Cli.Commands
                 new Option<string>("--version", "Provide the version of software the merged BOM describes (required for hierarchical merging)."),
                 new Option<bool>("--validate-output", "Validate the merged document before writing it, and do not write it if validation fails."),
                 new Option<bool>("--validate-output-relaxed", "Validate the merged document, but still write it (for troubleshooting) even if validation fails."),
+                new Option<bool>("--strip-empty-lists", "Omit empty list properties (e.g. \"licenses\": [], \"dependsOn\": []) from the output instead of writing them out. Schema-valid either way; this just avoids redundant clutter."),
 #if NET8_0_OR_GREATER
                 new Option<ComponentConflictResolution>("--component-conflict-resolution", "How to resolve two equivalent (same type/name/version/group/purl) but not-identical Components, e.g. differing only by Scope. Default: squash, preferring the more permissive Scope."),
                 new Option<bool>("--attach-dangling-components", "Attach any components no dependsOn edge reaches (grouped by Scope into synthetic components) so consumers that walk the dependency graph from the subject, rather than scanning the flat components list, don't silently miss them."),
@@ -178,6 +179,13 @@ namespace CycloneDX.Cli.Commands
             }
 #endif
 
+            if (options.StripEmptyLists)
+            {
+                // Applied before validation so the validated document
+                // matches what OutputBomHelper actually writes below.
+                CycloneDXUtils.CleanupEmptyListsDeep(outputBom);
+            }
+
             ValidationResult validationResult = null;
             if (options.ValidateOutput || options.ValidateOutputRelaxed)
             {
@@ -213,7 +221,7 @@ namespace CycloneDX.Cli.Commands
                 Console.WriteLine($"    Total {outputBom.Components?.Count ?? 0} components");
             }
 
-            var res = await CliUtils.OutputBomHelper(outputBom, (ConvertFormat)options.OutputFormat, options.OutputVersion, options.OutputFile).ConfigureAwait(false);
+            var res = await CliUtils.OutputBomHelper(outputBom, (ConvertFormat)options.OutputFormat, options.OutputVersion, options.OutputFile, options.StripEmptyLists).ConfigureAwait(false);
             if (validationResult != null && !validationResult.Valid)
             {
                 // Relaxed mode: the file was still written above, but the
